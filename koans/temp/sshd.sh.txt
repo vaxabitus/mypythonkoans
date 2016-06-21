@@ -1,0 +1,76 @@
+#!/bin/bash
+
+FILERSA="remote_rsa"
+USER_SSH_DIR="/home/oracle/.ssh"
+#CUR_DIR="/var/lib/jenkins/jobs/Check_SSH/workspace/default"
+CUR_DIR="/tmp"
+RESULT_GOOD_FILE="TestGood"
+RESULT_BAD_FILE="TestBad"
+LOGFILE="steps.log"
+
+if [ ! -f "$LOGFILE" ]; then
+        touch "$LOGFILE"
+else
+        date > "$LOGFILE"
+fi
+
+function savetolog()
+{
+        echo "$1" >> $LOGFILE
+}
+
+function myemail()
+{
+        cat > email.txt <<EOF
+$CUR_DATE
+You have new generated Private file for user: oracle
+File name: $FILERSA
+EOF
+}
+
+function runmailx()
+{
+        savetolog "$(echo -e "4. run func runmailx")"
+        myemail
+        savetolog "$(echo -e "5. run myemail and create email.txt")"
+        SENDEMAIL=`cat email.txt | mailx -v -A gmail -s "$(echo -e "Private file\nContent-Type: text/html")"  -a "$CUR_DIR"/"$FILERSA" denislugovoj@yandex.ru`
+         if [ "$?" -ne 0 ]; then
+                savetolog "$(echo -e "6. NOT SEND")"
+                
+        else
+                savetolog "$(echo -e "6. email sent")"
+        fi
+}
+
+function checkfile()
+{
+        if [ -f "$USER_SSH_DIR"/"$FILERSA" ]; then
+                echo "$FILERSA exists" >> "$RESULT_GOOD_FILE"
+        		savetolog "$(echo -e "3. $FILERSA exists")"
+        else
+        		echo -e "$(pwd)"
+                ssh-keygen -t rsa -b 4096 -N '' -f "$CUR_DIR"/"$FILERSA"
+        		cp "$CUR_DIR"/"$FILERSA" "$USER_SSH_DIR"
+        		cp "$CUR_DIR"/"$FILERSA".pub "$USER_SSH_DIR"
+        		savetolog "$(echo -e "3. Generating file and cp to user dir")"
+        		runmailx
+        		savetolog "$(echo -e "7. run runmailx end")"
+    	fi
+}
+
+l_TELNET=`echo "quit" | telnet $1 $2 | grep "Escape character is"`
+
+if [ "$?" -ne 0 ]; then
+  echo "Connection to $1 on port $2 failed" > "$RESULT_BAD_FILE"
+  savetolog "$(echo -e "1. conn failed")"
+  savetolog "$(echo -e "2. run ckeckfile")"
+  checkfile
+  exit 1
+else
+  echo "Connection to $1 on port $2 succeeded" > "$RESULT_GOOD_FILE"
+  savetolog "$(echo -e "1. conn succeded")"
+  savetolog "$(echo -e "2. run checkfile")"
+  checkfile
+  whoami >> "$RESULT_GOOD_FILE"
+  exit 0
+fi
